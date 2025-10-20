@@ -79,3 +79,9 @@ def _generate_workflows(repo_path: Path, config: dict):
         template = env.get_template("claude-pr-review.yml.j2")
         output = template.render(claude=config["claude"])
         (workflows_dir / "claude-pr-review.yml").write_text(output)
+
+    # Generate Devin workflow
+    if config.get("devin", {}).get("enabled", False):
+        template = env.get_template("devin-pr-review.yml.j2")
+        output = template.render(devin=config["devin"])
+        (workflows_dir / "devin-pr-review.yml").write_text(output)

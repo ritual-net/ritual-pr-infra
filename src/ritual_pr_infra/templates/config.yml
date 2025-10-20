@@ -18,3 +18,12 @@ claude:
     "on": [opened, synchronize]
     labels: []
 
+devin:
+  enabled: true
+  prompts:
+    - shared/engineering.md
+    - shared/fsm-verification.md
+  trigger:
+    "on": [opened, synchronize, reopened]
+    labels: []
+
