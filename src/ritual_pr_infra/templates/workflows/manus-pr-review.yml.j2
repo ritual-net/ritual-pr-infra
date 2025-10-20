@@ -38,17 +38,23 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
       
       - name: Trigger Manus Review
+        env:
+          PROMPT: ${{ steps.prompts.outputs.COMBINED_PROMPT }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
+          jq -n \
+            --arg prompt "$PROMPT" \
+            --arg pr_url "$PR_URL" \
+            '{
+              prompt: ($prompt + "\n\nReview PR: " + $pr_url),
+              taskMode: "agent",
+              agentProfile: "quality",
+              createShareableLink: true
+            }' | \
           curl --request POST \
             --url 'https://api.manus.ai/v1/tasks' \
             --header 'API_KEY: ${{ secrets.MANUS_API_KEY }}' \
             --header 'Content-Type: application/json' \
-            --data "{
-              \"prompt\": \"${{ steps.prompts.outputs.COMBINED_PROMPT }}\n\nReview PR: ${{ github.event.pull_request.html_url }}\",
-              \"taskMode\": \"agent\",
-              \"connectors\": [\"github\"],
-              \"agentProfile\": \"quality\",
-              \"createShareableLink\": true
-            }"
+            --data @-
           {% endraw %}
 
