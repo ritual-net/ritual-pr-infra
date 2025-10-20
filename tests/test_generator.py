@@ -25,9 +25,8 @@ def test_generate_infrastructure():
         assert (repo_path / ".ritual-pr" / "config.yml").exists()
 
         # Check that default prompts were created
-        assert (repo_path / ".ritual-pr" / "prompts" / "shared" / "security.md").exists()
-        assert (repo_path / ".ritual-pr" / "prompts" / "shared" / "quality.md").exists()
-        assert (repo_path / ".ritual-pr" / "prompts" / "shared" / "performance.md").exists()
+        assert (repo_path / ".ritual-pr" / "prompts" / "shared" / "engineering.md").exists()
+        assert (repo_path / ".ritual-pr" / "prompts" / "shared" / "fsm-verification.md").exists()
 
         # Check that workflows were created
         assert (repo_path / ".github" / "workflows" / "manus-pr-review.yml").exists()
