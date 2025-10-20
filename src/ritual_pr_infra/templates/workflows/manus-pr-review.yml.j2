@@ -45,6 +45,7 @@ jobs:
           REPO: ${{ github.repository }}
           CONNECTOR_ID: ${{ secrets.MANUS_GITHUB_CONNECTOR_ID }}
           API_KEY: ${{ secrets.MANUS_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
         continue-on-error: true
         run: |
           # Build instructions
