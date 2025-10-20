@@ -52,10 +52,20 @@ jobs:
             
             ${{ steps.prompts.outputs.COMBINED_PROMPT }}
             
-            Review this pull request and provide detailed feedback.
-            Use `gh pr comment` for top-level observations.
-            Use `mcp__github_inline_comment__create_inline_comment` to highlight specific code issues.
-            Post your review as GitHub comments on the PR.
+            ## Review Instructions
+            
+            1. **First, check existing reviews:** Use `gh pr view ${{ github.event.pull_request.number }} --comments` to read all existing PR comments
+            2. **Check if you've already reviewed:** Look for comments from "claude" or "github-actions"
+            3. **If you've already reviewed this PR:**
+               - Read your previous review(s) carefully
+               - Check if the issues you identified have been addressed
+               - Focus on NEW changes since your last review
+               - Update or supplement your previous feedback rather than repeating it
+               - Mention which previous issues were fixed and which remain
+            4. **If this is your first review:** Provide comprehensive feedback
+            5. **Always:** Use `gh pr comment` for top-level observations
+            6. **Always:** Use `mcp__github_inline_comment__create_inline_comment` to highlight specific code issues
+            7. **Always:** Post your review as GitHub comments on the PR
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           {% endraw %}
