@@ -1,0 +1,22 @@
+version: "1.0"
+
+manus:
+  enabled: true
+  prompts:
+    - shared/security.md
+    - shared/quality.md
+    - shared/performance.md
+  trigger:
+    "on": [opened, synchronize]
+    labels: []  # Optional: only run if PR has these labels
+
+claude:
+  enabled: true
+  prompts:
+    - shared/security.md
+    - shared/quality.md
+    - shared/performance.md
+  trigger:
+    "on": [opened, synchronize]
+    labels: []
+

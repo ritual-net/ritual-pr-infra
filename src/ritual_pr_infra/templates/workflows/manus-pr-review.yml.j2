@@ -1,0 +1,54 @@
+name: Manus PR Review
+
+on:
+  pull_request:
+    types:
+{%- for event in manus.trigger.on %}
+      - {{ event }}
+{%- endfor %}
+{%- if manus.trigger.labels %}
+    labels:
+{%- for label in manus.trigger.labels %}
+      - {{ label }}
+{%- endfor %}
+{%- endif %}
+
+jobs:
+  manus-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Read Prompts
+        id: prompts
+        run: |
+          PROMPT=""
+{% for prompt_file in manus.prompts %}
+          PROMPT+=$(cat .ritual-pr/prompts/{{ prompt_file }})
+          PROMPT+=$'\n\n'
+{% endfor %}
+          {% raw %}
+          echo "COMBINED_PROMPT<<EOF" >> $GITHUB_OUTPUT
+          echo "$PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Trigger Manus Review
+        run: |
+          curl --request POST \
+            --url 'https://api.manus.ai/v1/tasks' \
+            --header 'API_KEY: ${{ secrets.MANUS_API_KEY }}' \
+            --header 'Content-Type: application/json' \
+            --data "{
+              \"prompt\": \"${{ steps.prompts.outputs.COMBINED_PROMPT }}\n\nReview PR: ${{ github.event.pull_request.html_url }}\",
+              \"taskMode\": \"agent\",
+              \"connectors\": [\"github\"],
+              \"agentProfile\": \"quality\",
+              \"createShareableLink\": true
+            }"
+          {% endraw %}
+

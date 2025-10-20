@@ -1,0 +1,47 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types:
+{%- for event in claude.trigger.on %}
+      - {{ event }}
+{%- endfor %}
+{%- if claude.trigger.labels %}
+    labels:
+{%- for label in claude.trigger.labels %}
+      - {{ label }}
+{%- endfor %}
+{%- endif %}
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Read Prompts
+        id: prompts
+        run: |
+          PROMPT=""
+{% for prompt_file in claude.prompts %}
+          PROMPT+=$(cat .ritual-pr/prompts/{{ prompt_file }})
+          PROMPT+=$'\n\n'
+{% endfor %}
+          {% raw %}
+          echo "COMBINED_PROMPT<<EOF" >> $GITHUB_OUTPUT
+          echo "$PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Run Claude Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          prompt: ${{ steps.prompts.outputs.COMBINED_PROMPT }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          {% endraw %}
+

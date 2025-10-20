@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ritual-pr-infra"
+version = "0.1.0"
+description = "Minimal setup tool for Manus and Claude PR reviews"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Ritual Team"}
+]
+dependencies = [
+    "click>=8.1.0",
+    "pyyaml>=6.0",
+    "jinja2>=3.1.0",
+]
+
+[project.scripts]
+ritual-pr-infra = "ritual_pr_infra.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.8.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
