@@ -14,7 +14,7 @@ lint:
 	uvx ruff check src/ tests/
 
 test:
-	uvx --from . --with pytest pytest tests/ -v
+	uv run pytest tests/ -v
 
 all: format lint test
 
