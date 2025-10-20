@@ -37,7 +37,10 @@ This creates:
 Add these secrets to your GitHub repository (Settings → Secrets and variables → Actions):
 
 - `MANUS_API_KEY` - Your Manus API key
+- `MANUS_GITHUB_CONNECTOR_ID` - Your Manus GitHub connector UUID (from https://manus.im → Connectors → GitHub)
 - `ANTHROPIC_API_KEY` - Your Anthropic API key
+
+**Note for Manus:** You must first connect GitHub in the Manus web UI (https://manus.im → Connectors → GitHub) and authorize access to your repositories. The connector UUID will be shown after setup.
 
 ### 2. Commit and Push
 
