@@ -31,6 +31,7 @@ def test_generate_infrastructure():
         # Check that workflows were created
         assert (repo_path / ".github" / "workflows" / "manus-pr-review.yml").exists()
         assert (repo_path / ".github" / "workflows" / "claude-pr-review.yml").exists()
+        assert (repo_path / ".github" / "workflows" / "devin-pr-review.yml").exists()
 
         # Check workflow content
         manus_workflow = (repo_path / ".github" / "workflows" / "manus-pr-review.yml").read_text()
@@ -40,6 +41,10 @@ def test_generate_infrastructure():
         claude_workflow = (repo_path / ".github" / "workflows" / "claude-pr-review.yml").read_text()
         assert "name: Claude PR Review" in claude_workflow
         assert "ANTHROPIC_API_KEY" in claude_workflow
+
+        devin_workflow = (repo_path / ".github" / "workflows" / "devin-pr-review.yml").read_text()
+        assert "name: Devin PR Review" in devin_workflow
+        assert "DEVIN_API_KEY" in devin_workflow
 
 
 def test_generate_infrastructure_existing_files():

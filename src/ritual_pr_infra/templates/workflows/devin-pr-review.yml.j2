@@ -1,0 +1,185 @@
+name: Devin PR Review
+
+on:
+  pull_request:
+    types:
+{%- for event in devin.trigger.on %}
+      - {{ event }}
+{%- endfor %}
+{%- if devin.trigger.labels %}
+    labels:
+{%- for label in devin.trigger.labels %}
+      - {{ label }}
+{%- endfor %}
+{%- endif %}
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  devin-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Read Prompts
+        id: prompts
+        run: |
+          PROMPT=""
+{% for prompt_file in devin.prompts %}
+          PROMPT+=$(cat .ritual-pr/prompts/{{ prompt_file }})
+          PROMPT+=$'\n\n'
+{% endfor %}
+          {% raw %}
+          echo "COMBINED_PROMPT<<EOF" >> $GITHUB_OUTPUT
+          echo "$PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Get PR Files
+        id: pr-files
+        run: |
+          FILES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" | \
+            jq -r '[.[].filename] | @json')
+
+          if [ -z "$FILES" ]; then
+            echo "Error: Failed to fetch or parse PR files."
+            exit 1
+          fi
+
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Create Devin Review Session
+        id: devin-review
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
+          FILES_TO_REVIEW: ${{ steps.pr-files.outputs.files }}
+          CUSTOM_PROMPTS: ${{ steps.prompts.outputs.COMBINED_PROMPT }}
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+        run: |
+          # Build comprehensive review prompt
+          REVIEW_PROMPT="You are PR Reviewer Devin with expertise in engineering standards and formal verification.
+
+          ## Your Review Criteria
+
+          $CUSTOM_PROMPTS
+
+          ## Your Tasks
+
+          1. Clone the repository ${{ github.repository }} locally.
+          2. Set up a pre-push Git hook that prevents any pushes from username 'Devin AI' OR email containing 'devin-ai-integration'. Activate the hook.
+          3. View the diffs of changed files for PR #${{ github.event.pull_request.number }} in repository ${{ github.repository }}.
+          4. Read existing PR comments to check if you have already reviewed this PR.
+          5. If you have reviewed before, focus only on NEW changes since your last review.
+          6. If necessary, run the code locally to verify changes work as expected.
+          7. If no issues are found, post a comment saying 'DEVIN AI REVIEW - Everything looks good!' and stop.
+          8. Else, identify issues and provide inline code comments on the diffs for violations.
+          9. Post your feedback as detailed comments on the PR with specific line references.
+
+          ## Rules and Guidelines
+
+          1. NEVER make any commits or pushes - you are ONLY allowed to review code and leave comments
+          2. Do not make more than three total comments on the PR
+          3. Use inline feedback where possible with specific line references
+          4. Include code snippets in markdown format when discussing issues
+          5. Default towards multi-line comments that show context
+          6. Make sure suggested improvements aren't already implemented by comparing old and new versions
+          7. Use gh api to post comments with referenced code embedded
+          8. Before commenting, check PR discussion to avoid duplicate feedback
+          9. Check that specific issues weren't already addressed in previous review iterations
+          10. If you see the same issue multiple times, consolidate into a single comment
+          11. Refer back to these rules before making comments
+          12. Never ask for user confirmation or wait for messages
+          13. Start your comments with: DEVIN AI REVIEW
+          
+          ## How to Post Comments with Code Embedded
+
+          Create JSON file for each comment:
+          ```json
+          {
+            \"body\": \"Issue description with code snippets\",
+            \"commit_id\": \"${{ github.event.pull_request.head.sha }}\",
+            \"path\": \"file.py\",
+            \"line\": 11,
+            \"side\": \"RIGHT\"
+          }
+          ```
+
+          For multi-line comments:
+          ```json
+          {
+            \"body\": \"Multiple issues found...\",
+            \"commit_id\": \"${{ github.event.pull_request.head.sha }}\",
+            \"path\": \"file.py\",
+            \"start_line\": 11,
+            \"start_side\": \"RIGHT\",
+            \"line\": 25,
+            \"side\": \"RIGHT\"
+          }
+          ```
+
+          Post with:
+          ```bash
+          gh api --method POST \\
+            -H \"Accept: application/vnd.github+json\" \\
+            \"/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments\" \\
+            --input comment.json
+          ```
+
+          Changed files to review: $FILES_TO_REVIEW
+
+          Repository: ${{ github.repository }}
+          PR Number: ${{ github.event.pull_request.number }}
+          PR URL: ${{ github.event.pull_request.html_url }}"
+
+          # Create Devin session
+          ESCAPED_PROMPT=$(echo "$REVIEW_PROMPT" | jq -Rs .)
+
+          echo "Creating Devin review session for PR #${{ github.event.pull_request.number }}..."
+
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer $DEVIN_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"prompt\": $ESCAPED_PROMPT}" \
+            "https://api.devin.ai/v1/sessions")
+
+          # Check for errors
+          ERROR_MSG=$(echo "$RESPONSE" | jq -r '.detail // empty')
+          if [ -n "$ERROR_MSG" ]; then
+            echo "❌ Error creating Devin session: $ERROR_MSG"
+            echo "Response: $RESPONSE"
+            gh pr comment "${{ github.event.pull_request.number }}" --body "⚠️ **Devin AI** - Unable to start review session. API error: $ERROR_MSG" || true
+            exit 1
+          fi
+
+          SESSION_ID=$(echo "$RESPONSE" | jq -r '.session_id // empty')
+          SESSION_URL=$(echo "$RESPONSE" | jq -r '.url // empty')
+
+          if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
+            echo "❌ Error: Devin session details missing from response"
+            echo "Response: $RESPONSE"
+            gh pr comment "${{ github.event.pull_request.number }}" --body "⚠️ **Devin AI** - Unable to start review. Session creation failed." || true
+            exit 1
+          fi
+
+          echo "✅ Devin session created successfully"
+          echo "Session ID: $SESSION_ID"
+          echo "Session URL: $SESSION_URL"
+
+          # Post comment with Devin session link
+          gh pr comment "${{ github.event.pull_request.number }}" --body "🤖 **Devin AI Review Started**
+
+Devin is reviewing this PR with focus on engineering standards and formal verification.
+
+📊 **Session URL:** $SESSION_URL
+
+Devin will post inline code comments and recommendations when the review is complete." || true
+          {% endraw %}
+
