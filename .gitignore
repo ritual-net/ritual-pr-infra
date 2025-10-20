@@ -46,3 +46,7 @@ Thumbs.db
 # uv
 .uv/
 
+
+# Environment variables
+.env
+.env.*
