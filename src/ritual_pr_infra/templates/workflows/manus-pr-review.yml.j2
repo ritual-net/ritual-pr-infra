@@ -41,13 +41,16 @@ jobs:
         env:
           PROMPT: ${{ steps.prompts.outputs.COMBINED_PROMPT }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          CONNECTOR_ID: ${{ secrets.MANUS_GITHUB_CONNECTOR_ID }}
         run: |
           jq -n \
             --arg prompt "$PROMPT" \
             --arg pr_url "$PR_URL" \
+            --arg connector_id "$CONNECTOR_ID" \
             '{
               prompt: ($prompt + "\n\nReview PR: " + $pr_url),
               taskMode: "agent",
+              connectors: [$connector_id],
               agentProfile: "quality",
               createShareableLink: true
             }' | \
