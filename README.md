@@ -147,6 +147,42 @@ ritual-pr-infra update-workflows [--path /path/to/repo]
 - `.github/workflows/manus-pr-review.yml`
 - `.github/workflows/claude-pr-review.yml`
 
+### `trigger-manus` - Manually Trigger Manus Review ⭐ NEW
+
+```bash
+# Set environment variables first
+export MANUS_API_KEY=your-api-key
+export MANUS_GITHUB_CONNECTOR_ID=your-connector-uuid
+
+# Trigger review for a PR
+cd /path/to/your/repo
+ritual-pr-infra trigger-manus https://github.com/owner/repo/pull/123
+```
+
+**Use this when:**
+- GitHub Actions is rate-limited by Manus API
+- You want to manually trigger a review when creating a PR
+- You need immediate review without waiting for workflow
+
+**What it does:**
+1. Reads prompts from your repository's `.ritual-pr/prompts/`
+2. Combines all Manus prompts (shared + manus-specific)
+3. Sends request directly to Manus API from your local machine
+4. Returns task URL where you can track the review
+5. Bypasses GitHub Actions entirely (no IP blocking issues)
+
+**Example:**
+```bash
+# After creating a PR
+git push
+ritual-pr-infra trigger-manus https://github.com/myorg/myrepo/pull/42
+
+# Output:
+# ✅ Success! Manus review task created
+# 📊 Task URL: https://manus.im/app/xyz123
+# 🔗 Share URL: https://manus.im/share/xyz123
+```
+
 ## Default Prompts
 
 The tool includes two production-ready prompts:
@@ -269,15 +305,30 @@ claude:
 3. Copy the exact connector UUID to GitHub secrets
 4. Trigger a new PR update to retry
 
-### Manus API Rate Limiting
+### Manus API Rate Limiting / GitHub Actions Blocking
 
-**Problem:** Manus workflow fails with "request too many"  
-**Cause:** Manus API has a rate limit (200 requests/minute, 60s reset)  
-**Solution:** 
-- The workflow automatically retries with exponential backoff (2s, 4s, 8s)
-- If all retries fail, it posts a warning comment
-- Wait 60 seconds and push another commit to retry
-- Normal usage (one PR update = one API call) won't hit limits
+**Problem:** Manus workflow fails with "request too many" from GitHub Actions  
+**Cause:** Manus API may rate-limit or block GitHub Actions IP addresses  
+**Solution:** Use the `trigger-manus` command to manually trigger reviews from your local machine
+
+```bash
+# Set your API credentials
+export MANUS_API_KEY=your-key
+export MANUS_GITHUB_CONNECTOR_ID=your-connector-uuid
+
+# Trigger review manually
+cd /path/to/your/repo
+ritual-pr-infra trigger-manus https://github.com/owner/repo/pull/123
+```
+
+This bypasses GitHub Actions entirely and works reliably since it runs from your local IP.
+
+**Why this happens:**
+- Manus has rate limits: 200 requests/minute, 60s reset window
+- GitHub Actions runners may share IP pools that hit these limits
+- Manus may have stricter limits for CI/CD IP addresses
+
+**Workflow still valuable:** Claude reviews work perfectly via GitHub Actions. Use `trigger-manus` for Manus reviews.
 
 ### Claude Review Not Appearing
 
