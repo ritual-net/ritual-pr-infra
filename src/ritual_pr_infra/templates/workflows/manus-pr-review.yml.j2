@@ -37,7 +37,7 @@ jobs:
           echo "$PROMPT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
       
-      - name: Trigger Manus Review with Retry
+      - name: Trigger Manus Review
         env:
           PROMPT: ${{ steps.prompts.outputs.COMBINED_PROMPT }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -45,184 +45,73 @@ jobs:
           REPO: ${{ github.repository }}
           CONNECTOR_ID: ${{ secrets.MANUS_GITHUB_CONNECTOR_ID }}
           API_KEY: ${{ secrets.MANUS_API_KEY }}
+        continue-on-error: true
         run: |
-          # Function to create Manus task with proper error handling
-          create_manus_task() {
-            local attempt=$1
-            local max_attempts=3
-            local retry_delay=$((2 ** attempt))  # Exponential backoff: 2, 4, 8 seconds
-            
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "Attempt $attempt of $max_attempts"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            
-            # Build instructions for Manus
-            INSTRUCTIONS=$(cat <<'INSTRUCTIONS_EOF'
+          # Build instructions
+          INSTRUCTIONS="
+
+          IMPORTANT INSTRUCTIONS FOR MANUS AI:
+          1. Read existing PR comments to check if you have already reviewed this PR
+          2. If you have reviewed before, focus only on NEW changes since your last review
+          3. After completing your review, USE THE GITHUB CONNECTOR to post a comment on this PR
+          4. Start your comment with: MANUS AI REVIEW
+          5. Include your findings, recommendations, and action items
+          6. Repository: $REPO, PR Number: $PR_NUMBER"
           
-          ## Review Instructions
+          # Create JSON payload
+          PAYLOAD=$(jq -n \
+            --arg prompt "$PROMPT" \
+            --arg instructions "$INSTRUCTIONS" \
+            --arg pr_url "$PR_URL" \
+            --arg connector_id "$CONNECTOR_ID" \
+            '{
+              prompt: ($prompt + "\n\nPull Request: " + $pr_url + $instructions),
+              taskMode: "agent",
+              connectors: [$connector_id],
+              agentProfile: "quality",
+              createShareableLink: true
+            }')
           
-          1. First, read existing PR comments using the GitHub connector to see what has already been reviewed
-          2. Check if you (Manus AI) have already reviewed this PR - look for comments starting with MANUS AI REVIEW
-          3. If you have already reviewed:
-             - Read your previous review carefully
-             - Check which issues have been addressed and which remain
-             - Focus on NEW changes since your last review
-             - Update or supplement your previous feedback rather than repeating it
-             - Start with: MANUS AI REVIEW - UPDATE - Following up on my previous review
-          4. If this is your first review:
-             - Start your comment: MANUS AI REVIEW - I have completed a comprehensive review of this PR
-          5. Review the pull request thoroughly using the GitHub connector
-          6. Include your detailed findings, recommendations, and action items
-          7. IMPORTANT: Use the GitHub connector to post your comment to this PR
-          8. Format your comment in clear markdown with sections for different review areas
-          INSTRUCTIONS_EOF
-          )
+          echo "Payload size: $(echo "$PAYLOAD" | wc -c) bytes"
+          
+          # Retry with exponential backoff
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt..."
             
-            # Construct JSON payload with jq for proper escaping
-            PAYLOAD=$(jq -n \
-              --arg prompt "$PROMPT" \
-              --arg instructions "$INSTRUCTIONS" \
-              --arg pr_url "$PR_URL" \
-              --arg pr_number "$PR_NUMBER" \
-              --arg repo "$REPO" \
-              --arg connector_id "$CONNECTOR_ID" \
-              '{
-                prompt: ($prompt + "\n\nReview this pull request: " + $pr_url + $instructions),
-                taskMode: "agent",
-                connectors: [$connector_id],
-                agentProfile: "quality",
-                createShareableLink: true
-              }')
-            
-            # Validate JSON
-            if ! echo "$PAYLOAD" | jq empty 2>/dev/null; then
-              echo "❌ ERROR: Generated invalid JSON"
-              echo "$PAYLOAD" | head -100
-              return 1
-            fi
-            
-            # Log payload info
-            PAYLOAD_SIZE=$(echo "$PAYLOAD" | wc -c)
-            echo "✓ Payload size: $PAYLOAD_SIZE bytes"
-            echo "✓ Connector ID: ${CONNECTOR_ID:0:8}...${CONNECTOR_ID: -8}"
-            echo "✓ PR: $REPO#$PR_NUMBER"
-            
-            # Make API request with full response capture
-            RESPONSE=$(echo "$PAYLOAD" | curl -s -w "\n__HTTP_CODE__%{http_code}" \
+            RESPONSE=$(echo "$PAYLOAD" | curl -s -w "\nHTTP_%{http_code}" \
               --request POST \
               --url 'https://api.manus.ai/v1/tasks' \
               --header "API_KEY: $API_KEY" \
               --header 'Content-Type: application/json' \
-              --header 'Accept: application/json' \
               --data @-)
             
-            # Extract HTTP code and body
-            HTTP_CODE=$(echo "$RESPONSE" | grep "__HTTP_CODE__" | sed 's/.*__HTTP_CODE__//')
-            RESPONSE_BODY=$(echo "$RESPONSE" | sed '/__HTTP_CODE__/d')
+            HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_" | sed 's/HTTP_//')
+            BODY=$(echo "$RESPONSE" | grep -v "HTTP_")
             
-            echo "HTTP Status: $HTTP_CODE"
-            echo "Response: $RESPONSE_BODY"
+            echo "Status: $HTTP_CODE"
+            echo "Response: $BODY"
             
-            # Check response
-            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-              # Success!
-              TASK_ID=$(echo "$RESPONSE_BODY" | jq -r '.task_id // empty')
-              TASK_URL=$(echo "$RESPONSE_BODY" | jq -r '.task_url // empty')
-              SHARE_URL=$(echo "$RESPONSE_BODY" | jq -r '.share_url // empty')
-              
-              if [ -n "$TASK_ID" ]; then
-                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                echo "✅ SUCCESS: Manus review task created!"
-                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                echo "Task ID: $TASK_ID"
-                echo "Task URL: $TASK_URL"
-                echo "Share URL: $SHARE_URL"
-                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                
-                # Post success comment to PR
-                gh pr comment "$PR_NUMBER" --body "🤖 **Manus AI Review Started**
-
-Manus is reviewing this PR. You can follow the progress here:
-- 📊 [View Review Task]($TASK_URL)
-- 🔗 [Shareable Link]($SHARE_URL)
-
-Manus will post a comprehensive review comment when complete." || true
-                
-                return 0
-              else
-                echo "⚠️ WARNING: Got 200 OK but no task_id in response"
-                return 1
+            if [ "$HTTP_CODE" = "200" ]; then
+              TASK_URL=$(echo "$BODY" | jq -r '.task_url // empty')
+              if [ -n "$TASK_URL" ]; then
+                echo "✅ Manus task created: $TASK_URL"
+                gh pr comment "$PR_NUMBER" --body "🤖 **Manus AI Review** - Review in progress: $TASK_URL" || true
+                exit 0
               fi
-            elif [ "$HTTP_CODE" = "429" ]; then
-              # Rate limited
-              echo "❌ Rate limited (429 Too Many Requests)"
-              echo "Will retry in $retry_delay seconds..."
-              return 2
-            elif [ "$HTTP_CODE" = "400" ]; then
-              # Bad request - likely won't succeed with retry
-              echo "❌ Bad Request (400)"
-              ERROR_MSG=$(echo "$RESPONSE_BODY" | jq -r '.message // .msg // "Unknown error"')
-              echo "Error message: $ERROR_MSG"
-              
-              # Check if it's a known transient error
-              if echo "$ERROR_MSG" | grep -qi "too many\|rate"; then
-                echo "Looks like rate limiting, will retry..."
-                return 2
-              else
-                echo "Permanent error, not retrying"
-                return 1
+            fi
+            
+            # Retry if looks like rate limiting
+            if echo "$BODY" | grep -qi "too many\|rate"; then
+              if [ $attempt -lt 3 ]; then
+                sleep $((2 ** attempt))
+                continue
               fi
             else
-              echo "❌ HTTP $HTTP_CODE"
-              echo "Response: $RESPONSE_BODY"
-              return 1
-            fi
-          }
-          
-          # Main retry loop with exponential backoff
-          MAX_ATTEMPTS=3
-          for i in $(seq 1 $MAX_ATTEMPTS); do
-            if create_manus_task $i; then
-              echo ""
-              echo "🎉 Manus review triggered successfully!"
-              exit 0
-            fi
-            
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -eq 1 ]; then
-              echo "Permanent failure, not retrying"
               break
-            fi
-            
-            # Retry with exponential backoff
-            if [ $i -lt $MAX_ATTEMPTS ]; then
-              DELAY=$((2 ** i))
-              echo "⏳ Waiting $DELAY seconds before retry..."
-              sleep $DELAY
             fi
           done
           
-          # All attempts failed
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "❌ FAILED: Could not create Manus review task after $MAX_ATTEMPTS attempts"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "This is a known issue. Possible causes:"
-          echo "1. Rate limiting from GitHub Actions IP addresses"
-          echo "2. API quota exceeded"
-          echo "3. Payload size exceeds undocumented limit"
-          echo ""
-          echo "Manual workaround: You can trigger a Manus review manually at:"
-          echo "https://manus.im"
-          echo ""
-          
-          # Don't fail the workflow - just warn
-          gh pr comment "$PR_NUMBER" --body "⚠️ **Manus AI Review** - Unable to automatically trigger review
-
-The Manus API is currently unavailable. This is a known intermittent issue.
-
-You can manually request a review at https://manus.im or wait for the next PR update to retry." || true
-          
-          exit 1
+          echo "⚠️ Failed to create Manus task"
+          gh pr comment "$PR_NUMBER" --body "⚠️ **Manus AI** - Unable to start review automatically. Manus API may be rate-limiting." || true
+          exit 0
           {% endraw %}
