@@ -33,6 +33,35 @@ def generate_infrastructure(repo_path: Path):
     with open(ritual_pr_dir / "config.yml") as f:
         config = yaml.safe_load(f)
 
+    # Generate workflows
+    _generate_workflows(repo_path, config)
+
+
+def update_workflows(repo_path: Path):
+    """Update only workflow files, preserving all prompts
+
+    This is useful when workflow templates have been updated but you want to
+    keep your custom prompts unchanged.
+    """
+    ritual_pr_dir = repo_path / ".ritual-pr"
+    config_file = ritual_pr_dir / "config.yml"
+
+    if not config_file.exists():
+        raise FileNotFoundError(f"Config file not found: {config_file}. Run 'init' first.")
+
+    # Load existing config
+    with open(config_file) as f:
+        config = yaml.safe_load(f)
+
+    # Regenerate only workflows
+    _generate_workflows(repo_path, config)
+
+
+def _generate_workflows(repo_path: Path, config: dict):
+    """Internal function to generate workflow files from config"""
+    workflows_dir = repo_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+
     # Setup Jinja2
     env = Environment(
         loader=PackageLoader("ritual_pr_infra", "templates/workflows"),

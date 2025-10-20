@@ -3,9 +3,8 @@ version: "1.0"
 manus:
   enabled: true
   prompts:
-    - shared/security.md
-    - shared/quality.md
-    - shared/performance.md
+    - shared/engineering.md
+    - shared/fsm-verification.md
   trigger:
     "on": [opened, synchronize]
     labels: []  # Optional: only run if PR has these labels
@@ -13,9 +12,8 @@ manus:
 claude:
   enabled: true
   prompts:
-    - shared/security.md
-    - shared/quality.md
-    - shared/performance.md
+    - shared/engineering.md
+    - shared/fsm-verification.md
   trigger:
     "on": [opened, synchronize]
     labels: []
