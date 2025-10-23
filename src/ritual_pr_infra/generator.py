@@ -21,9 +21,10 @@ def generate_infrastructure(repo_path: Path):
     shared_prompts_dir.mkdir(exist_ok=True)
     workflows_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy default config
+    # Copy default config and README
     templates_dir = Path(__file__).parent / "templates"
     shutil.copy(templates_dir / "config.yml", ritual_pr_dir / "config.yml")
+    shutil.copy(templates_dir / "README.md", ritual_pr_dir / "README.md")
 
     # Copy default prompts
     for prompt_file in (templates_dir / "prompts").glob("*.md"):

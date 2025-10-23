@@ -1,5 +1,11 @@
 version: "1.0"
 
+# ⚠️ IMPORTANT: After editing this file, run `uvx ritual-pr-infra update-workflows`
+# to regenerate the GitHub Actions workflows with your changes.
+# 
+# This config is used at generation time, not at runtime. The workflows are
+# generated once and run independently, so changes here require regeneration.
+
 manus:
   enabled: true
   prompts:
