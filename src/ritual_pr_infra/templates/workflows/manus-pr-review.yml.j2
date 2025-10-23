@@ -107,6 +107,8 @@ jobs:
             echo "Attempt $attempt..."
             
             RESPONSE=$(echo "$PAYLOAD" | curl -s -w "\nHTTP_%{http_code}" \
+              --max-time 30 \
+              --connect-timeout 10 \
               --request POST \
               --url 'https://api.manus.ai/v1/tasks' \
               --header "API_KEY: $API_KEY" \
@@ -143,3 +145,4 @@ jobs:
           gh pr comment "$PR_NUMBER" --body "⚠️ **Manus AI** - Unable to start review automatically. Manus API may be rate-limiting." || true
           exit 0
           {% endraw %}
+

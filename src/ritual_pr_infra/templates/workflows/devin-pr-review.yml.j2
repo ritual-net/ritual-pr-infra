@@ -96,6 +96,8 @@ jobs:
             echo "Creating Devin session (attempt $attempt)..."
             
             RESPONSE=$(curl -s -w "\n__HTTP__%{http_code}" \
+              --max-time 30 \
+              --connect-timeout 10 \
               --request POST \
               --url 'https://api.devin.ai/v1/sessions' \
               --header "Authorization: Bearer $DEVIN_API_KEY" \
@@ -130,3 +132,4 @@ jobs:
           echo "❌ Failed to create Devin session after 3 attempts"
           gh pr comment "$PR_NUMBER" --body "⚠️ **Devin AI** - Unable to start review session after multiple retries" || true
           {% endraw %}
+
