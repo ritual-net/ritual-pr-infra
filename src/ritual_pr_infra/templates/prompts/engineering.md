@@ -6,8 +6,6 @@ Review this pull request against core engineering principles and standards:
 - Does the design prioritize maintainability and safe failure modes with thoughtful autohealing?
 - Are compute, memory, I/O, and networking resources used reasonably and efficiently?
 - Is the right framework/tool being used for the job (polyglot when needed)?
-- Does it leverage managed resources instead of hand-rolling custom solutions?
-- Does it adhere to standardization of shared infrastructure, containerization, and utilities?
 
 ## Code Quality & Correctness
 - Are there sufficient unit, regression, fuzz, and integration tests?
@@ -16,7 +14,6 @@ Review this pull request against core engineering principles and standards:
 - Is multithreading/multiprocessing used sparingly and only when needed?
 
 ## System Design
-- Does the system optimize for availability over consistency (unless specified otherwise)?
 - Are failure modes safe and structured?
 - Is the design easy to maintain by other team members?
 
