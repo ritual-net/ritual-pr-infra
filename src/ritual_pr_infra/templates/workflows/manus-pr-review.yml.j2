@@ -24,6 +24,33 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
       
+      - name: Validate Environment
+        run: |
+          {% raw %}# Validate required secrets
+          if [ -z "${{ secrets.MANUS_API_KEY }}" ]; then
+            echo "❌ Error: MANUS_API_KEY secret not configured"
+            echo "Please add MANUS_API_KEY to repository secrets:"
+            echo "Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.MANUS_GITHUB_CONNECTOR_ID }}" ]; then
+            echo "❌ Error: MANUS_GITHUB_CONNECTOR_ID secret not configured"
+            echo "Please add MANUS_GITHUB_CONNECTOR_ID to repository secrets"
+            echo "Get it from: https://manus.im → Connectors → GitHub"
+            exit 1
+          fi
+          {% endraw %}
+          
+          # Validate prompt files exist
+{% for prompt_file in manus.prompts %}
+          if [ ! -f ".ritual-pr/prompts/{{ prompt_file }}" ]; then
+            echo "❌ Error: Prompt file not found: .ritual-pr/prompts/{{ prompt_file }}"
+            exit 1
+          fi
+{% endfor %}
+          echo "✅ All validations passed"
+      
       - name: Read Prompts
         id: prompts
         run: |

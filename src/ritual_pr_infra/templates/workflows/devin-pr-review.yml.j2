@@ -28,6 +28,26 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Validate Environment
+        run: |
+          {% raw %}# Validate required secrets
+          if [ -z "${{ secrets.DEVIN_API_KEY }}" ]; then
+            echo "❌ Error: DEVIN_API_KEY secret not configured"
+            echo "Please add DEVIN_API_KEY to repository secrets:"
+            echo "Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          {% endraw %}
+          
+          # Validate prompt files exist
+{% for prompt_file in devin.prompts %}
+          if [ ! -f ".ritual-pr/prompts/{{ prompt_file }}" ]; then
+            echo "❌ Error: Prompt file not found: .ritual-pr/prompts/{{ prompt_file }}"
+            exit 1
+          fi
+{% endfor %}
+          echo "✅ All validations passed"
+      
       - name: Read Prompts
         id: prompts
         run: |
@@ -71,33 +91,42 @@ jobs:
             --arg files "$FILES_TO_REVIEW" \
             '$custom_prompts + "\n\n## Review Task\n\nYou are PR Reviewer Devin. Review PR #" + $pr_number + " in repository " + $repo + "\n\n### Instructions\n1. Clone repository " + $repo + " locally\n2. Set up pre-push Git hook preventing pushes from username Devin AI or email containing devin-ai-integration\n3. View diffs of changed files for this PR\n4. Read existing PR comments to check if you have already reviewed\n5. If reviewed before, focus only on NEW changes\n6. Run code locally if needed to verify changes\n7. If no issues: post DEVIN AI REVIEW - Everything looks good\n8. If issues found: provide inline comments on specific lines\n9. Post detailed feedback as PR comments\n\n### Rules\n1. NEVER make commits or pushes\n2. Maximum 3 comments on the PR\n3. Use inline feedback with line references\n4. Include code snippets in markdown\n5. Use multi-line comments for context\n6. Check suggestions are not already implemented\n7. Use gh api to post comments with code embedded\n8. Check PR discussion before commenting to avoid duplicates\n9. Consolidate repeated issues into single comment\n10. Start comments with DEVIN AI REVIEW\n\n### Post Comments Using gh api\nCreate JSON: {\"body\": \"Issue\", \"commit_id\": \"" + $commit_sha + "\", \"path\": \"file.py\", \"line\": 11, \"side\": \"RIGHT\"}\nPost with: gh api --method POST -H Accept:application/vnd.github+json /repos/" + $repo + "/pulls/" + $pr_number + "/comments --input comment.json\n\n### Changed Files\n" + $files + "\n\nPR URL: " + $pr_url')
           
-          echo "Creating Devin session..."
-          
-          RESPONSE=$(curl -s -w "\n__HTTP__%{http_code}" \
-            --request POST \
-            --url 'https://api.devin.ai/v1/sessions' \
-            --header "Authorization: Bearer $DEVIN_API_KEY" \
-            --header 'Content-Type: application/json' \
-            --data "{\"prompt\": $(echo "$DEVIN_PROMPT" | jq -Rs .)}")
-          
-          HTTP_CODE=$(echo "$RESPONSE" | grep "__HTTP__" | sed 's/.*__HTTP__//')
-          BODY=$(echo "$RESPONSE" | sed '/__HTTP__/d')
-          
-          echo "HTTP $HTTP_CODE"
-          echo "Response: $BODY"
-          
-          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-            SESSION_ID=$(echo "$BODY" | jq -r '.session_id // empty')
-            SESSION_URL=$(echo "$BODY" | jq -r '.url // empty')
+          # Retry with exponential backoff (3 attempts)
+          for attempt in 1 2 3; do
+            echo "Creating Devin session (attempt $attempt)..."
             
-            if [ -n "$SESSION_ID" ]; then
-              echo "✅ Devin session created: $SESSION_URL"
-              gh pr comment "$PR_NUMBER" --body "🤖 **Devin AI Review Started** - Session: $SESSION_URL" || true
-            else
-              echo "⚠️ No session_id in response"
+            RESPONSE=$(curl -s -w "\n__HTTP__%{http_code}" \
+              --request POST \
+              --url 'https://api.devin.ai/v1/sessions' \
+              --header "Authorization: Bearer $DEVIN_API_KEY" \
+              --header 'Content-Type: application/json' \
+              --data "{\"prompt\": $(echo \"$DEVIN_PROMPT\" | jq -Rs .)}")
+            
+            HTTP_CODE=$(echo "$RESPONSE" | grep "__HTTP__" | sed 's/.*__HTTP__//')
+            BODY=$(echo "$RESPONSE" | sed '/__HTTP__/d')
+            
+            echo "HTTP $HTTP_CODE"
+            echo "Response: $BODY"
+            
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+              SESSION_ID=$(echo "$BODY" | jq -r '.session_id // empty')
+              SESSION_URL=$(echo "$BODY" | jq -r '.url // empty')
+              
+              if [ -n "$SESSION_ID" ]; then
+                echo "✅ Devin session created: $SESSION_URL"
+                gh pr comment "$PR_NUMBER" --body "🤖 **Devin AI Review Started** - Session: $SESSION_URL" || true
+                exit 0
+              fi
             fi
-          else
-            echo "❌ Failed to create Devin session"
-            gh pr comment "$PR_NUMBER" --body "⚠️ **Devin AI** - Unable to start review session" || true
-          fi
+            
+            # Retry if transient error
+            if [ $attempt -lt 3 ]; then
+              SLEEP_TIME=$((2 ** attempt))
+              echo "⚠️ Retrying in ${SLEEP_TIME}s..."
+              sleep $SLEEP_TIME
+            fi
+          done
+          
+          echo "❌ Failed to create Devin session after 3 attempts"
+          gh pr comment "$PR_NUMBER" --body "⚠️ **Devin AI** - Unable to start review session after multiple retries" || true
           {% endraw %}
